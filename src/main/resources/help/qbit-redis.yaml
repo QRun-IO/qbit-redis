@@ -1,0 +1,39 @@
+bundle: qbit-redis
+version: ${project.version}
+layer: QBIT
+entries:
+- key: app:redis;slot:help
+  summary: "Inspect Redis connections, realtime delivery and recorded health checks."
+  content: |
+    Connections and realtime counters describe the web node serving this page.
+    They are not totals for the cluster. Started means a pool exists; use health
+    results to assess connectivity. Refreshing this page does not start services.
+
+    Health history uses the application's standard health monitoring. Open View
+    health check to inspect the check, its schedule, recent results and latency.
+    Health readers can inspect results. Health administrators can change the
+    check settings or select Run check now and review the action before running it.
+    Changes affect monitoring, not Redis connection configuration.
+- key: widget:redisConnections;slot:label
+  summary: "Inspect named connection pool usage on this web node."
+  content: |
+    Active connections are borrowed from the pool; idle connections are available.
+    Waiting shows callers waiting for a connection. Maximum is the configured pool
+    limit. A realtime subscriber reserves a connection while it is listening.
+    Started is a lifecycle state and does not mean Redis is reachable.
+- key: widget:redisRealtime;slot:label
+  summary: "Inspect subscription readiness and delivery counters on this web node."
+  content: |
+    Not configured means Redis realtime was not enabled. Unavailable means the
+    configured transport is absent or not listening. Listening means subscription
+    acknowledgements have arrived. Queued messages await local dispatch; dropped
+    messages and publication failures trigger resynchronization. Counters reset
+    when the transport restarts and do not represent cluster totals.
+- key: widget:redisHealthHistory;slot:label
+  summary: "Review the latest 20 recorded Redis health results, newest first."
+  content: |
+    This section requires health read access in addition to Redis view access.
+    Results come from the shared health framework; no checks run when this page
+    renders. Runner pod identifies where a recorded check ran. Empty history does
+    not prove Redis is healthy. View health check opens the standard record with
+    its settings and permissioned Run check now action.
