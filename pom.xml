@@ -37,7 +37,7 @@
    <properties>
       <revision>0.1.0-SNAPSHOT</revision>
       <maven.compiler.release>21</maven.compiler.release>
-      <qqq.snapshot.version>4.1.0-SNAPSHOT</qqq.snapshot.version>
+      <qqq.snapshot.version>4.1.0-collab-33464d37e-SNAPSHOT</qqq.snapshot.version>
       <jedis.version>7.2.0</jedis.version>
    </properties>
    <dependencyManagement>
