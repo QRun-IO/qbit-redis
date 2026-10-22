@@ -1,32 +1,35 @@
-# Coordinated candidate snapshot
+# Coordinated published snapshot
 
-Status: locally verified candidate; remote publication is pending. This is not a production deployment checklist or an RC certification.
+The main-line milestone is complete. These feature snapshots are published and verified together; this is not a stable/GA release or a production deployment.
 
-## Local evidence
+| Component | Version |
+| --- | --- |
+| QQQ BOM/modules | `4.1.0-collab-33464d37e-SNAPSHOT` |
+| qbit-redis | `0.1.0-redis-7fe5492-SNAPSHOT` |
+| qbit-collaboration | `0.1.0-collab-8f348da-SNAPSHOT` |
+| qbit-session-store | `0.1.0-session-b5276ab-SNAPSHOT` |
+| Next frontend source | `8d372142f8af0c41a75a353edc6d150c33ccf613` |
 
-- Collaboration default verify:179tests, no failures/errors/skips, coverage and guardrails passed.
-- UI focused34 plus Chromium normal-flow suites16 passed; TypeScript passed.
-- Live browser with mocks disabled: two independent QQQ JVMs share presence; editing focus, drafts, table projection and departure verified.
-- Redis admin shows live pool/realtime metrics and real framework-persisted health results, with navigation to the standard health check.
-- Standalone Maven consumer built and ran packaged collaboration/Redis candidates without source paths or a reactor; Redis-absent consumer uses the new issued-lease protocol successfully.
+Use the public Maven snapshot repository https://central.sonatype.com/repository/maven-snapshots/ and import the candidate QQQ BOM. All four publishers succeeded. Independent JAR/POM downloads and a standalone consumer using an initially empty Maven cache passed; all five QQQ modules align and only Jedis7.2.0 is resolved.
 
-## Publication order and remaining checks
+## Verification
 
-1. Capture reviewed source revisions for the coordinated core, Redis, collaboration, session-store and frontend candidates. Preserve unrelated worktrees and edits.
-2. Verify core candidate b0673b0a1 on feature/collaboration-production-20261021 (supersedes failed4205; merge cleanup regression reproduced and fixed,27merge and337RDBMS tests passed), then publish its feature-specific QQQ snapshot using the existing core publish-tag workflow. Record the actual resulting Maven version; do not assume the hash abbreviation or overwrite the shared develop snapshot. Align downstream qqq.snapshot.version to that published candidate. The consumer graph includes backend-core, backend-module-rdbms, middleware-javalin and openapi, plus their parent/BOM.
-3. GitHub repository https://github.com/QRun-IO/qbit-redis exists PUBLIC, matching existing QBits. Initial sourceb21356a and CI ownership fix13e9537 are on feature/redis-production-20261021; no Maven artifact is published. CircleCI project gh/QRun-IO/qbit-redis exists (ID7c6fe3ea-5281-437a-b188-818d7d83a604). Pipeline2 setup passes, but verification fails compilation against the published core SNAPSHOT, which lacks getIfStarted/getAudience. Publish the coordinated core prerequisite first, then rerun. Default branch currently follows the initial feature branch. Use the existing publish-tag feature snapshot path for this coordinated candidate; no develop merge is required.
-4. Run Redis CI and publish its feature-specific snapshot through the standard QBit orb. Record the resulting exact version and pin collaboration/session-store to it before their verification/publication. The local CI config matches the current GitHub collaboration configuration's orb0.7.18 entry point. Authenticated registry lookup confirms this is a private orb and0.7.18 exists. Config validation PASSED with the verified QRun-IO organization ID: `circleci config validate .circleci/config.yml --org bb329fea-03cd-4fb5-b530-15e85703598d`. Earlier missing-orb messages were caused by absent organization context (the repo had no remote for inference at that time), not a missing release. Use the existing session credential loader and map CIRCLECI_TOKEN to CIRCLE_TOKEN only within the invoking process. Actual Redis pipeline2 reached verification and failed on the missing core APIs; a passing run remains required. The Redis POM exposes the revision property required by the orb's version script.
-5. Run and publish feature-specific collaboration and session-store snapshots using publish-prefixed tags, plus the coordinated frontend candidate as applicable. Frontend and collaboration lease endpoints require coordinated rollout; do not pair the new frontend with an older backend.
-6. Resolve exact published artifacts in a fresh consumer cache, repeat normal host startup/presence/admin checks, and record remote coordinates, source SHAs and artifact checksums. Local cache success is insufficient for this step.
+Redis23, collaboration177 and session-store96 tests passed against published prerequisites, with zero failures/errors/skips and configured coverage gates passing. Core verification4209 and frontend acceptance39683690943 passed. Frontend local3664 tests and TypeScript passed. The frontend acceptance run contains the tested export; no dashboard container image was published by that run.
 
-The earlier request authorizes preparing a snapshot when ready. Repository/CI setup and feature-branch source upload are complete; artifact publication remains pending. Source and staged-diff Gitleaks scans passed. Generated logs and local progress evidence were excluded from the initial commit.
+Final browser checks used the downloaded published JARs, exact CI frontend export, two independent JVMs and one Redis endpoint. Cross-node avatars, self exclusion, editor focus, preserved drafts, table presence and departure passed. Redis admin metrics, subscription state, persisted framework UP health history and health-record navigation passed. The fixtures use mock users and independent memory records; database concurrency and authentication have separate core/frontend tests. Test-owned processes were stopped afterward.
 
-## Operational scope
+Exact release receipts and evidence: [QQQ #1293](https://github.com/QRun-IO/qqq/issues/1293#issuecomment-6329618640). Host integration and migration guide: [coordinated candidate](https://github.com/QRun-IO/qbit-collaboration/blob/c3182e2/docs/CANDIDATE-RELEASE.md).
 
-Initial path: multiple QQQ web nodes, one configured Redis endpoint, host-provided authentication/tenant scope, HTTP lease writes, SSE browser delivery and Redis Pub/Sub invalidation. Presence is advisory; database version checks protect saves.
+## Supported milestone
 
-Optional future work remains QQQ #1300 (loss/restore), #1301 (failover topology), #1302 (sustained scale/failure injection), #1304 (Windows coverage-summary display portability), and #1305 (Windows filesystem qualification). No transparent disaster-recovery guarantee is part of this snapshot. If the normal presence/admin flow fails in staging, stop rollout and retain the prior coordinated frontend/backend set; do not downgrade only one side of the lease protocol.
+Multiple QQQ web nodes share one configured Redis endpoint. Collaboration owns presence semantics; Redis owns connection/cache infrastructure; session-store retains session semantics. Browser delivery uses SSE plus HTTP lease writes, and Redis Pub/Sub carries invalidation hints. Configure node affinity for SSE subscription updates. Shared Redis does not make connection IDs portable. Presence is advisory; versioned database compare-and-write protects saves.
 
-## Candidate publication configuration
+Before host adoption, configure authoritative identity/tenant scope, unique deployment/application namespaces, TLS/authentication, bounded pools/timeouts, explicit QInstance session registration, owner-scoped shutdown, and schema migrations. Upgrade the frontend/backend lease protocol together. Existing hosts are not automatically migrated by library publication; rollout is tracked in [#1315](https://github.com/QRun-IO/qqq/issues/1315).
 
-Redis uses orb0.7.18; session-store is aligned to0.7.18 because0.7.12 does not support QBit feature publication. Collaboration retains its current0.8 track. All three manifests explicitly enable feature publication, and setup tag filters accept publish-prefixed candidate tags alongside existing stable tags. Authenticated CircleCI config validation passes for all three. Exact0.7.18 manifest loading and feature-workflow rendering pass for Redis/session-store; current0.8 source confirms the same feature path. No tag or artifact is created by configuration preparation. Pin actual core/Redis coordinates only after publication proves availability.
+## Optional future work
+
+The owner's main-line-only scope leaves attachment failure qualification #1289, capacity/My Work failure qualification #1291, selectable tag/EAV projection #1196, data loss/restore #1300, additional Redis topologies #1301, sustained scale #1302, additional proxy deployments #1316 and admin/client coupling enhancements #1317 open. Tooling/dependency maintenance remains #1304/#1305/#1307/#1309/#1310/#1312/#1314. No measured production capacity or disaster-recovery guarantee is claimed.
+
+## Publication lessons
+
+Use short feature branch names: the help bundle version limit is 50 characters. The first long core candidate failed before publication; unchanged source passed with the short coordinate above. Preserve original worktree branches and failed tags. Feature-enabled QBit setup must use the canonical `/publish.*/` tag filter; schema validation alone does not check that contract. Redis/session-store use orb0.7.18; collaboration uses the managed0.8 track. Pin actual published prerequisite versions before downstream publication and verify remote resolution afterward.

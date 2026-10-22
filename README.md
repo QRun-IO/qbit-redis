@@ -1,10 +1,10 @@
 # QBit Redis
 
 Reusable Redis connections and bounded shared caches for QQQ applications.
-**Development candidate; not released or production-certified.** Track
-[QQQ #1295](https://github.com/QRun-IO/qqq/issues/1295) and [remaining gates](docs/TODO.md).
-See [snapshot preparation](docs/SNAPSHOT-RELEASE.md) for current normal-flow evidence,
-publication order and the explicitly deferred optional scenarios.
+**Coordinated feature snapshot published; not a stable/GA release.** Track
+[QQQ #1295](https://github.com/QRun-IO/qqq/issues/1295) and [completed milestone and follow-ups](docs/TODO.md).
+See [published snapshot](docs/SNAPSHOT-RELEASE.md) for current normal-flow evidence,
+exact compatible versions and the explicitly deferred optional scenarios.
 
 ## Host integration
 
