@@ -29,8 +29,11 @@ configure `.withTlsProvider(new QCodeReference(HostRedisTls.class))`; that provi
 returns an SSLContext at runtime, and hostname verification stays enabled.
 `.withTls(false)` is an explicit option for local test Redis. Real integration tests
 verify authenticated TLS, untrusted-certificate rejection, wrong-host rejection,
-and no plaintext fallback. Client-certificate authentication, certificate rotation
-and failover acceptance remain open; only standalone endpoints are implemented.
+and no plaintext fallback. Mutual-TLS tests require a separate trusted client
+identity, reject missing or untrusted client certificates, and verify framework
+health after a successful authenticated connection. Certificates and keys are
+generated only for the disposable fixture. Certificate rotation and failover
+acceptance remain open; only standalone endpoints are implemented.
 
 QQQ's application launcher starts the registered runtime service. Startup validates
 configuration and pings every connection before exposing any of the named pools.
