@@ -32,8 +32,18 @@ verify authenticated TLS, untrusted-certificate rejection, wrong-host rejection,
 and no plaintext fallback. Mutual-TLS tests require a separate trusted client
 identity, reject missing or untrusted client certificates, and verify framework
 health after a successful authenticated connection. Certificates and keys are
-generated only for the disposable fixture. Certificate rotation and failover
-acceptance remain open; only standalone endpoints are implemented.
+generated only for the disposable fixture.
+
+The TLS provider is resolved when the Redis runtime starts. Replacing its context
+alone does not reload existing pools or subscribers. For certificate replacement,
+stop dependent services and restart the Redis runtime through the application
+lifecycle, then restart its dependents. Qualification replaces both server and
+client certificates on the same Redis endpoint: stale material fails a fresh
+handshake, health becomes DOWN, and runtime restart with updated material restores
+PONG and health UP while closing the old pool. This is a restart procedure, not
+zero-downtime certificate rotation. Live reload, trust-chain/revocation policies,
+subscriber recovery across certificate changes and failover acceptance remain open;
+only standalone endpoints are implemented.
 
 QQQ's application launcher starts the registered runtime service. Startup validates
 configuration and pings every connection before exposing any of the named pools.
