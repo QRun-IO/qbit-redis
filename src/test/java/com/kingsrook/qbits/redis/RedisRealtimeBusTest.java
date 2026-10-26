@@ -88,7 +88,8 @@ class RedisRealtimeBusTest
                {
                   Thread.sleep(10);
                }
-            });
+            }, () -> "No heartbeat received; transport=" + bus.metrics()
+               + ", pool=" + RedisRuntimeService.connection(instance, "realtime").metrics());
             // Keep sockets open but suppress server command progress beyond the read deadline.
             redis.execInContainer("redis-cli", "CLIENT", "PAUSE", "17000", "ALL");
             assertTimeoutPreemptively(Duration.ofSeconds(17), () ->
