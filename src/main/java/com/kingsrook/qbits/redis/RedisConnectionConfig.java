@@ -39,6 +39,7 @@ public class RedisConnectionConfig implements Serializable
    private Integer maximumWaitMillis = 500;
    private QCodeReference credentialsProvider = null;
    private QCodeReference tlsProvider = null;
+   private String writeHealthKeyPrefix = null;
 
    /***************************************************************************
     ** Validate bounds without exposing endpoint or credential values in errors.
@@ -60,6 +61,10 @@ public class RedisConnectionConfig implements Serializable
       if(tlsProvider != null && !Boolean.TRUE.equals(tls))
       {
          errors.add("Redis TLS provider requires TLS to be enabled");
+      }
+      if(writeHealthKeyPrefix != null && !writeHealthKeyPrefix.matches("[A-Za-z0-9:_-]{1,128}:"))
+      {
+         errors.add("Redis write health prefix must be a bounded identifier ending in a colon");
       }
       if(connectionTimeoutMillis == null || connectionTimeoutMillis < 1 || socketTimeoutMillis == null || socketTimeoutMillis < 1
          || maximumConnections == null || maximumConnections < 1 || maximumWaitMillis == null || maximumWaitMillis < 1)
@@ -218,6 +223,23 @@ public class RedisConnectionConfig implements Serializable
    public RedisConnectionConfig withTlsProvider(QCodeReference value)
    {
       tlsProvider = value;
+      return (this);
+   }
+
+   /***************************************************************************
+    ** Optional host-owned namespace for one-second write probes; null means ping only.
+    ***************************************************************************/
+   public String getWriteHealthKeyPrefix()
+   {
+      return (writeHealthKeyPrefix);
+   }
+
+   /***************************************************************************
+    ** Reserve a health-only prefix allowed by this connection's Redis ACL.
+    ***************************************************************************/
+   public RedisConnectionConfig withWriteHealthKeyPrefix(String value)
+   {
+      writeHealthKeyPrefix = value;
       return (this);
    }
 }
