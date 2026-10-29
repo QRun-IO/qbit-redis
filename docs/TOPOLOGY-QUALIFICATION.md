@@ -72,6 +72,37 @@ session-store concern. No production routing or retry behavior changed.
 
 ## Remaining deployment qualification
 
+### Live-primary fencing and partition healing (October 29 candidate)
+
+`RedisPartitionHealingTest` adds an OSS Valkey 9.1.3 primary/replica fixture.
+The original primary requires one connected replica with at most one second
+of replication lag before accepting writes. The test disconnects the replica
+from its Docker network without stopping the primary. An existing QQQ pool
+observes `NOREPLICAS` while the same primary remains running and answers PING;
+the rejected write does not create a key. The first focused run observed that
+fence after 1,640 ms. This is a local observation, not a guaranteed bound.
+
+Only after that rejection does the fixture promote the detached replica.
+It reconnects the network, demotes the old primary to a replica of the new
+primary, restores the one-replica write requirement, and verifies new data
+replicates back. The unchanged old QQQ endpoint then rejects writes as READONLY.
+The bounded QQQ pool is released, and both containers/network are cleaned up.
+One focused test passed with no failures, errors or skips in 24.15 seconds.
+
+The full Windows and containerized-Linux runs subsequently reported command
+socket timeouts during healing, alongside timeouts in existing authentication
+and promotion tests. Both paths use Docker Desktop published-port forwarding.
+An isolated idle-PING diagnostic measured 300–900 ms replies through that path,
+but 0–58 ms on an owned direct Docker network. No runtime timeout, test deadline,
+or assertion was relaxed. Full qualification remains pending native CI evidence.
+
+This fixture targets controlled promotion after verified write fencing. It does not
+implement automatic discovery, prove fencing for arbitrary partitions, or
+promise zero data loss. Writes can be acknowledged during the replication-lag
+window before fencing; applications requiring durable revocation cannot infer
+session correctness from this presence-oriented availability test. The actual
+deployment still needs its endpoint, TLS/ACL, admission and recovery contracts.
+
 - Select and qualify the actual HA endpoint provider and its routing behavior,
   including existing pooled connections when the primary changes.
 - Exercise partitions, old-primary fencing and healing. Stopping a process in
