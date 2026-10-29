@@ -80,6 +80,24 @@ measured capacity recommendations. `connection.metrics()` reports active, idle,
 waiting and maximum connections. `redis.connections` integrates with QQQ health
 checks and reports aggregate pool utilization without endpoints or secrets.
 
+Write-dependent hosts can opt in per connection with
+`withWriteHealthKeyPrefix("staging:myapp:health:")`. Reserve that prefix exclusively
+for health and permit SET on it in the connection's ACL. Each health run issues
+one `SET NX PX 1000` with a random key suffix. It never overwrites an existing
+key, and expiry removes probe data even if the reply is lost. The prefix is a
+bounded ASCII identifier ending in a colon; do not use application data prefixes.
+The default is null (connectivity only), preserving read-only and Pub/Sub-only
+connections. Health details report the number of successful `writeChecks`.
+A failed opted-in probe reports DOWN through the same framework check/history;
+no endpoint, key, credentials or provider exception is exposed.
+
+This is point-in-time SET acceptance, not replication durability, primary fencing,
+or proof that every application command/key is authorized. A writable stale
+primary can pass; topology fencing must remain an infrastructure guarantee.
+The host decides whether this check gates readiness. Do not enable the probe on
+an existing ACL until its dedicated prefix and write permission are configured.
+This option is currently an unpublished candidate.
+
 Other qbits consume only `com.kingsrook.qbits.redis.api`: `RedisAccess`,
 `RedisNamespace`, `RedisCache`, `RedisScript`, `RedisScriptExecutor`,
 `RedisCredentialsProvider` and `RedisTlsProvider`. `RedisAccess` returns cache or

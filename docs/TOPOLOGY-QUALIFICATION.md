@@ -35,7 +35,42 @@ transport and pool counters for diagnosis.
 No runtime behavior or supported deployment
 contract changes merely because this fixture passes.
 
-## Remaining acceptance
+## Stable endpoint switch evidence
+
+`RedisEndpointSwitchTest` adds a separate controlled infrastructure-switch case.
+Two existing QQQ pools and their subscriptions initially connect through one
+loopback TCP relay to the primary. The test verifies command sockets alongside
+acknowledged subscription sockets, waits for a marker on the replica, stops the
+old primary, and promotes the replica. The relay then changes its target and
+closes every accepted old connection. The QQQ instances, pools and buses are
+not recreated or reconfigured.
+
+Bounded read probes tolerate only connection errors while the old sockets are
+discarded; this is test polling, not automatic retry of application writes.
+After recovery, a single new write is read by the other pool and independently
+from the replica. Both subscription reconnect counters must advance, and a
+fresh cross-node event must arrive. Two-slot pool bounds and release of borrowed
+connections on bus shutdown are checked. The fixture closes its loopback relay,
+Redis containers and network. The focused run passed with 907 ms measured from
+promotion through fresh event delivery; this single observation is not an SLA.
+The subsequent full `./mvnw.cmd verify` run passed all 26 tests with zero
+failures, errors or skips, plus packaging and JaCoCo gates. Its endpoint-switch
+observation was 6,433 ms; the separate unchanged-endpoint promotion measured
+851 ms. Preserve this variability rather than treating the faster focused run
+as a deployment recovery target.
+
+An initial test stopped before promotion because it assumed the initial command
+sockets would remain separate after subscriptions borrowed them. The corrected
+fixture explicitly issues commands after subscription acknowledgement to ensure
+both connection types are established before injecting the switch.
+
+This tests controlled routing with forced old-socket termination and a stopped
+old primary. It does not qualify DNS changes while old sockets remain open,
+Sentinel/Cluster discovery, live-primary fencing, partition healing, TLS rotation,
+or a production HA endpoint provider. Session durability remains a separate
+session-store concern. No production routing or retry behavior changed.
+
+## Remaining deployment qualification
 
 - Select and qualify the actual HA endpoint provider and its routing behavior,
   including existing pooled connections when the primary changes.
@@ -45,8 +80,8 @@ contract changes merely because this fixture passes.
   semantics through failover. A replicated marker is not a session test.
 - Qualify TLS/authentication, endpoint changes, subscriber continuity and pool
   pressure together in the deployment topology.
-- Define host write-readiness when an endpoint is a replica. The current health
-  check observes connectivity and subscription acknowledgement, not writability.
+- Adopt the opt-in write-health probe below and define how the host uses its
+  result for readiness. Existing published health remains connectivity-only.
 - Record production-representative recovery timing and data-loss limits.
 
 Redis replication is asynchronous and permits data-loss windows. The read-only
@@ -62,3 +97,24 @@ Run the focused fixture with:
 
 The test owns and removes its containers and network. It does not connect to
 an existing deployment, change host configuration, or promote a live service.
+
+## Opt-in write-health candidate
+
+`RedisConnectionConfig.withWriteHealthKeyPrefix` enables a write check in the
+existing `redis.connections` framework health check. Each configured connection
+must accept a unique `SET NX PX 1000` under its dedicated host-owned prefix.
+Random suffixes and NX avoid overwriting existing keys; the one-second expiry
+also removes data after a lost reply. No deletion command or application key is
+used. The default remains connectivity-only for read-only/Pub/Sub consumers.
+
+The real Redis fixture verifies that PING still succeeds while a replica rejects
+the probe, promotion restores UP, denying SET through ACL makes it DOWN, and
+restoring SET permission returns UP. It also checks probe expiry and pool release.
+The six focused health/runtime/realtime tests pass. Full verification also passed: 28 tests, zero failures/errors/skips, packaging and JaCoCo gates (1:46). Initial test compilation used unsupported admin methods on the
+pooled client; the fixture now uses its owned container's redis-cli instead.
+
+This change is local and unpublished. Kof22 has not adopted it. The host must
+reserve and authorize the prefix, select its readiness policy, and qualify the
+deployed route. A writable isolated old primary can still pass: this probe does
+not establish fencing, replication durability or permission for arbitrary domain
+Lua/scripts. Connectivity and write acceptance are distinct from those guarantees.
