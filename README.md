@@ -168,7 +168,7 @@ Java 21, Maven wrapper and Docker are required for the full current tests:
 .\mvnw.cmd test
 ```
 
-The current candidate uses local QQQ `4.1.0-SNAPSHOT` and Jedis `7.2.0`. Tests use
+The current candidate uses the published QQQ `4.1.0-RC.21` and Jedis `7.2.0`. Tests use
 real disposable Redis containers. They cover sharing, expiry, isolation, outages,
 registration, failed startup cleanup, credential-error redaction, lifecycle,
 authentication, bounded pool exhaustion and TLS. TLS tests generate temporary
