@@ -32,6 +32,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
+import redis.clients.jedis.Protocol;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.testcontainers.containers.GenericContainer;
@@ -102,6 +103,117 @@ class RedisTlsTest
             TrustedContext.context = null;
          }
       }
+   }
+
+   /***************************************************************************
+    ** Redis must require a trusted client identity as well as server verification.
+    ***************************************************************************/
+   @Test
+   void mutualTlsRequiresTrustedClientCertificate() throws Exception
+   {
+      try(GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.4-alpine")).withExposedPorts(6379))
+      {
+         Path server = Files.createDirectory(temporary.resolve("server"));
+         Path client = Files.createDirectory(temporary.resolve("client"));
+         String host = redis.getHost();
+         String identity = (host.matches("[0-9.]+") || host.contains(":") ? "ip:" : "dns:") + host;
+         SSLContext trustOnly = certificate(server, identity);
+         certificate(client, "dns:client-fixture.invalid");
+         redis.withCopyFileToContainer(MountableFile.forHostPath(server.resolve("cert.pem"), 0444), "/server-cert.pem")
+            .withCopyFileToContainer(MountableFile.forHostPath(server.resolve("key.pem"), 0444), "/server-key.pem")
+            .withCopyFileToContainer(MountableFile.forHostPath(client.resolve("cert.pem"), 0444), "/client-trust.pem")
+            .withCommand("redis-server", "--port", "0", "--tls-port", "6379",
+               "--tls-cert-file", "/server-cert.pem", "--tls-key-file", "/server-key.pem",
+               "--tls-ca-cert-file", "/client-trust.pem", "--tls-auth-clients", "yes",
+               "--requirepass", RedisAuthenticationTest.TEST_PASSWORD);
+         redis.start();
+         var settings = new RedisConnectionConfig().withHost(host).withPort(redis.getMappedPort(6379))
+            .withConnectionTimeoutMillis(1000).withSocketTimeoutMillis(1000)
+            .withTlsProvider(new QCodeReference(TrustedContext.class))
+            .withCredentialsProvider(new QCodeReference(RedisAuthenticationTest.ValidCredentials.class));
+         var instance = RedisRuntimeTest.hostInstance();
+         new RedisQBitProducer().withQBitConfig(new RedisQBitConfig().withConnection("presence", settings)).produce(instance);
+         var runtime = new RedisRuntimeService();
+         try
+         {
+            TrustedContext.context = trustOnly;
+            assertThrows(QException.class, () -> runtime.start(instance), "Server trust alone must not satisfy mutual TLS");
+            assertThrows(IllegalStateException.class, () -> RedisRuntimeService.connection(instance, "presence"));
+            TrustedContext.context = clientContext(server, server);
+            assertThrows(QException.class, () -> runtime.start(instance), "An unrelated client identity must not authenticate");
+            assertThrows(IllegalStateException.class, () -> RedisRuntimeService.connection(instance, "presence"));
+            TrustedContext.context = clientContext(server, client);
+            runtime.start(instance);
+            assertEquals("PONG", RedisRuntimeService.connection(instance, "presence").client().ping());
+            assertEquals(com.kingsrook.qqq.backend.core.health.HealthStatus.UP, new RedisHealthCheck().run(
+               new com.kingsrook.qqq.backend.core.health.HealthCheckInput().withQInstance(instance)).getStatus());
+
+            // Rotate both identities on the same endpoint; existing TLS sessions do not re-handshake.
+            Path rotatedServer = Files.createDirectory(temporary.resolve("rotated-server"));
+            Path rotatedClient = Files.createDirectory(temporary.resolve("rotated-client"));
+            certificate(rotatedServer, identity);
+            certificate(rotatedClient, "dns:rotated-client-fixture.invalid");
+            redis.copyFileToContainer(MountableFile.forHostPath(rotatedServer.resolve("cert.pem"), 0444), "/rotated-server-cert.pem");
+            redis.copyFileToContainer(MountableFile.forHostPath(rotatedServer.resolve("key.pem"), 0444), "/rotated-server-key.pem");
+            redis.copyFileToContainer(MountableFile.forHostPath(rotatedClient.resolve("cert.pem"), 0444), "/rotated-client-trust.pem");
+            var oldClient = RedisRuntimeService.connection(instance, "presence").client();
+            var configured = oldClient.sendCommand(Protocol.Command.CONFIG, "SET",
+               "tls-cert-file", "/rotated-server-cert.pem", "tls-key-file", "/rotated-server-key.pem",
+               "tls-ca-cert-file", "/rotated-client-trust.pem");
+            assertEquals("OK", new String((byte[]) configured, java.nio.charset.StandardCharsets.UTF_8));
+            oldClient.getPool().clear();
+            assertThrows(redis.clients.jedis.exceptions.JedisException.class, oldClient::ping,
+               "A fresh connection with stale trust and client keys must fail");
+            assertEquals(0, oldClient.getPool().getNumActive());
+            var healthInput = new com.kingsrook.qqq.backend.core.health.HealthCheckInput().withQInstance(instance);
+            assertEquals(com.kingsrook.qqq.backend.core.health.HealthStatus.DOWN, new RedisHealthCheck().run(healthInput).getStatus());
+
+            TrustedContext.context = clientContext(rotatedServer, rotatedClient);
+            assertThrows(redis.clients.jedis.exceptions.JedisException.class, oldClient::ping,
+               "Changing the provider alone must not be mistaken for live TLS reload");
+            runtime.stop();
+            runtime.afterApplicationStop();
+            assertTrue(oldClient.getPool().isClosed());
+            assertThrows(IllegalStateException.class, () -> RedisRuntimeService.connection(instance, "presence"));
+            runtime.start(instance);
+            var newClient = RedisRuntimeService.connection(instance, "presence").client();
+            assertNotSame(oldClient, newClient);
+            assertEquals("PONG", newClient.ping());
+            assertEquals(com.kingsrook.qqq.backend.core.health.HealthStatus.UP, new RedisHealthCheck().run(healthInput).getStatus());
+            assertEquals(0, newClient.getPool().getNumActive());
+         }
+         finally
+         {
+            runtime.stop();
+            runtime.afterApplicationStop();
+            TrustedContext.context = null;
+         }
+      }
+   }
+
+   /***************************************************************************
+    ** Keep server trust independent of the client key presented to Redis.
+    ***************************************************************************/
+   private static SSLContext clientContext(Path server, Path client) throws Exception
+   {
+      KeyStore keys = KeyStore.getInstance("PKCS12");
+      try(var input = Files.newInputStream(client.resolve("test.p12")))
+      {
+         keys.load(input, "test-only-password".toCharArray());
+      }
+      var keyManagers = javax.net.ssl.KeyManagerFactory.getInstance(javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm());
+      keyManagers.init(keys, "test-only-password".toCharArray());
+      KeyStore trust = KeyStore.getInstance(KeyStore.getDefaultType());
+      trust.load(null, null);
+      try(var input = Files.newInputStream(server.resolve("cert.pem")))
+      {
+         trust.setCertificateEntry("server", java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(input));
+      }
+      var trustManagers = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+      trustManagers.init(trust);
+      SSLContext context = SSLContext.getInstance("TLS");
+      context.init(keyManagers.getKeyManagers(), trustManagers.getTrustManagers(), null);
+      return (context);
    }
 
    /***************************************************************************

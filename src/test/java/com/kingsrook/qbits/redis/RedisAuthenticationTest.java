@@ -54,7 +54,7 @@ class RedisAuthenticationTest
          RotatingCredentials.owner = instance;
          RotatingCredentials.password = TEST_PASSWORD;
          new RedisQBitProducer().withQBitConfig(new RedisQBitConfig().withConnection("realtime", new RedisConnectionConfig()
-            .withHost(redis.getHost()).withPort(redis.getMappedPort(6379)).withTls(false)
+            .withHost(FixtureEndpoint.host(redis)).withPort(FixtureEndpoint.port(redis)).withTls(false)
             .withCredentialsProvider(new QCodeReference(RotatingCredentials.class)))
             .withRealtime("realtime", "test", "rotation")).produce(instance);
          var runtime = new RedisRuntimeService();
@@ -136,7 +136,7 @@ class RedisAuthenticationTest
          RotatingCredentials.owner = instance;
          RotatingCredentials.password = TEST_PASSWORD;
          new RedisQBitProducer().withQBitConfig(new RedisQBitConfig().withConnection("cache", new RedisConnectionConfig()
-            .withHost(redis.getHost()).withPort(redis.getMappedPort(6379)).withTls(false)
+            .withHost(FixtureEndpoint.host(redis)).withPort(FixtureEndpoint.port(redis)).withTls(false)
             .withCredentialsProvider(new QCodeReference(RotatingCredentials.class)))).produce(instance);
          var runtime = new RedisRuntimeService();
          try
@@ -217,7 +217,7 @@ class RedisAuthenticationTest
          .withCommand("redis-server", "--requirepass", TEST_PASSWORD).withExposedPorts(6379))
       {
          redis.start();
-         var settings = new RedisConnectionConfig().withHost(redis.getHost()).withPort(redis.getMappedPort(6379))
+         var settings = new RedisConnectionConfig().withHost(FixtureEndpoint.host(redis)).withPort(FixtureEndpoint.port(redis))
             .withTls(false).withMaximumConnections(1).withMaximumWaitMillis(100).withSocketTimeoutMillis(250)
             .withCredentialsProvider(new QCodeReference(ValidCredentials.class));
          var instance = RedisRuntimeTest.hostInstance();
@@ -240,7 +240,7 @@ class RedisAuthenticationTest
             assertEquals(0, connection.metrics().active());
             long initialClients = clientCount(redis);
 
-            var bad = new RedisConnectionConfig().withHost(redis.getHost()).withPort(redis.getMappedPort(6379))
+            var bad = new RedisConnectionConfig().withHost(FixtureEndpoint.host(redis)).withPort(FixtureEndpoint.port(redis))
                .withTls(false).withCredentialsProvider(new QCodeReference(WrongCredentials.class));
             assertRejected(bad);
             assertEquals(initialClients, clientCount(redis));

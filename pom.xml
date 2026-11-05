@@ -37,6 +37,7 @@
    <properties>
       <revision>0.1.0-SNAPSHOT</revision>
       <maven.compiler.release>21</maven.compiler.release>
+      <!-- Pending: repin to the published canonical core version once the core integration PR is released. -->
       <qqq.snapshot.version>4.1.0-SNAPSHOT</qqq.snapshot.version>
       <jedis.version>7.2.0</jedis.version>
    </properties>
