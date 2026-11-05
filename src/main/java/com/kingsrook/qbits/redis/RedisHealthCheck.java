@@ -27,7 +27,7 @@ import com.kingsrook.qqq.backend.core.health.HealthCheckOutcome;
 import com.kingsrook.qqq.backend.core.health.HealthDetails;
 
 /*******************************************************************************
- ** Observe connectivity without returning keys, credentials or provider exceptions.
+ ** Observe configured connectivity/write checks without exposing keys or credentials.
  *******************************************************************************/
 public class RedisHealthCheck implements HealthCheck
 {
@@ -45,24 +45,42 @@ public class RedisHealthCheck implements HealthCheck
       int active = 0;
       int idle = 0;
       int waiting = 0;
+      int writeChecks = 0;
       try
       {
-         for(var connection : connections.values())
+         var config = input.getQInstance().getQBits().values().stream().map(bit -> bit.getConfig())
+            .filter(RedisQBitConfig.class::isInstance).map(RedisQBitConfig.class::cast).findFirst().orElseThrow();
+         for(var entry : connections.entrySet())
          {
+            var connection = entry.getValue();
             if(input.getDeadline() != null && !java.time.Instant.now().isBefore(input.getDeadline()))
             {
                return (HealthCheckOutcome.unknown("Redis health deadline exceeded"));
             }
             connection.client().ping();
+            String prefix = config.getConnections().get(entry.getKey()).getWriteHealthKeyPrefix();
+            if(prefix != null)
+            {
+               if(input.getDeadline() != null && !java.time.Instant.now().isBefore(input.getDeadline()))
+               {
+                  return (HealthCheckOutcome.unknown("Redis health deadline exceeded"));
+               }
+               // NX cannot overwrite existing data; expiry also cleans up after a lost reply.
+               String result = connection.client().set(prefix + java.util.UUID.randomUUID(), "1",
+                  redis.clients.jedis.params.SetParams.setParams().nx().px(1000));
+               if(!"OK".equals(result))
+               {
+                  return (HealthCheckOutcome.down("A Redis write health probe was not accepted"));
+               }
+               writeChecks++;
+            }
             var metrics = connection.metrics();
             active += metrics.active();
             idle += metrics.idle();
             waiting += metrics.waiting();
          }
          var details = new HealthDetails().withValue("connections", connections.size()).withValue("active", active)
-            .withValue("idle", idle).withValue("waiting", waiting);
-         var config = input.getQInstance().getQBits().values().stream().map(bit -> bit.getConfig())
-            .filter(RedisQBitConfig.class::isInstance).map(RedisQBitConfig.class::cast).findFirst().orElseThrow();
+            .withValue("idle", idle).withValue("waiting", waiting).withValue("writeChecks", writeChecks);
          if(config.getRealtimeTopic() != null)
          {
             var bus = com.kingsrook.qqq.backend.core.realtime.RealtimeBus.getIfStarted(input.getQInstance()).orElse(null);
@@ -74,11 +92,11 @@ public class RedisHealthCheck implements HealthCheck
             details.withValue("realtimeQueued", metrics.queued()).withValue("realtimeDropped", metrics.dropped())
                .withValue("realtimePublishFailures", metrics.publishFailures()).withValue("realtimeReconnects", metrics.reconnects());
          }
-         return (HealthCheckOutcome.up("Redis connections and configured transport are reachable").withDetails(details));
+         return (HealthCheckOutcome.up("Redis connections and configured checks succeeded").withDetails(details));
       }
       catch(RuntimeException failure)
       {
-         return (HealthCheckOutcome.down("A Redis connection is unavailable"));
+         return (HealthCheckOutcome.down("A Redis connection or configured probe is unavailable"));
       }
    }
 }

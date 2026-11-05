@@ -10,6 +10,7 @@ release_tag_policy: stable
 test_branch_policy: non-release
 publish:
   snapshot: true
+  feature: true
   release_candidate: true
   release: true
   asciidoc: false

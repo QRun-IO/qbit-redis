@@ -1,10 +1,10 @@
 # QBit Redis
 
 Reusable Redis connections and bounded shared caches for QQQ applications.
-**Development candidate; not released or production-certified.** Track
-[QQQ #1295](https://github.com/QRun-IO/qqq/issues/1295) and [remaining gates](docs/TODO.md).
-See [snapshot preparation](docs/SNAPSHOT-RELEASE.md) for current normal-flow evidence,
-publication order and the explicitly deferred optional scenarios.
+**Coordinated feature snapshot published; not a stable/GA release.** Track
+[QQQ #1295](https://github.com/QRun-IO/qqq/issues/1295) and [completed milestone and follow-ups](docs/TODO.md).
+See [published snapshot](docs/SNAPSHOT-RELEASE.md) for current normal-flow evidence,
+exact compatible versions and the explicitly deferred optional scenarios.
 
 ## Host integration
 
@@ -29,8 +29,21 @@ configure `.withTlsProvider(new QCodeReference(HostRedisTls.class))`; that provi
 returns an SSLContext at runtime, and hostname verification stays enabled.
 `.withTls(false)` is an explicit option for local test Redis. Real integration tests
 verify authenticated TLS, untrusted-certificate rejection, wrong-host rejection,
-and no plaintext fallback. Client-certificate authentication, certificate rotation
-and failover acceptance remain open; only standalone endpoints are implemented.
+and no plaintext fallback. Mutual-TLS tests require a separate trusted client
+identity, reject missing or untrusted client certificates, and verify framework
+health after a successful authenticated connection. Certificates and keys are
+generated only for the disposable fixture.
+
+The TLS provider is resolved when the Redis runtime starts. Replacing its context
+alone does not reload existing pools or subscribers. For certificate replacement,
+stop dependent services and restart the Redis runtime through the application
+lifecycle, then restart its dependents. Qualification replaces both server and
+client certificates on the same Redis endpoint: stale material fails a fresh
+handshake, health becomes DOWN, and runtime restart with updated material restores
+PONG and health UP while closing the old pool. This is a restart procedure, not
+zero-downtime certificate rotation. Live reload, trust-chain/revocation policies,
+subscriber recovery across certificate changes and failover acceptance remain open;
+only standalone endpoints are implemented.
 
 QQQ's application launcher starts the registered runtime service. Startup validates
 configuration and pings every connection before exposing any of the named pools.
@@ -66,6 +79,24 @@ borrow wait, and 2 s connection/socket timeouts. These are initial defaults, not
 measured capacity recommendations. `connection.metrics()` reports active, idle,
 waiting and maximum connections. `redis.connections` integrates with QQQ health
 checks and reports aggregate pool utilization without endpoints or secrets.
+
+Write-dependent hosts can opt in per connection with
+`withWriteHealthKeyPrefix("staging:myapp:health:")`. Reserve that prefix exclusively
+for health and permit SET on it in the connection's ACL. Each health run issues
+one `SET NX PX 1000` with a random key suffix. It never overwrites an existing
+key, and expiry removes probe data even if the reply is lost. The prefix is a
+bounded ASCII identifier ending in a colon; do not use application data prefixes.
+The default is null (connectivity only), preserving read-only and Pub/Sub-only
+connections. Health details report the number of successful `writeChecks`.
+A failed opted-in probe reports DOWN through the same framework check/history;
+no endpoint, key, credentials or provider exception is exposed.
+
+This is point-in-time SET acceptance, not replication durability, primary fencing,
+or proof that every application command/key is authorized. A writable stale
+primary can pass; topology fencing must remain an infrastructure guarantee.
+The host decides whether this check gates readiness. Do not enable the probe on
+an existing ACL until its dedicated prefix and write permission are configured.
+This option is currently an unpublished candidate.
 
 Other qbits consume only `com.kingsrook.qbits.redis.api`: `RedisAccess`,
 `RedisNamespace`, `RedisCache`, `RedisScript`, `RedisScriptExecutor`,
@@ -137,7 +168,7 @@ Java 21, Maven wrapper and Docker are required for the full current tests:
 .\mvnw.cmd test
 ```
 
-The current candidate uses local QQQ `4.1.0-SNAPSHOT` and Jedis `7.2.0`. Tests use
+The current candidate uses the published QQQ `4.1.0-RC.21` and Jedis `7.2.0`. Tests use
 real disposable Redis containers. They cover sharing, expiry, isolation, outages,
 registration, failed startup cleanup, credential-error redaction, lifecycle,
 authentication, bounded pool exhaustion and TLS. TLS tests generate temporary
